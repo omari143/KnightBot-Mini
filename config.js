@@ -4,44 +4,44 @@
 
 module.exports = {
     // Bot Owner Configuration
-    ownerNumber: ['91xxxxxxxxxxx','917023951514'], // Add your number without + or spaces (e.g., 919876543210)
-    ownerName: ['Knight Bot Mini', 'Professor'], // Owner names corresponding to ownerNumber array
+    ownerNumber: ['255716332371'], // Namba yako (bila +)
+    ownerName: ['MR AUTHOR'],
     
     // Bot Configuration
-    botName: 'Knight Bot Mini',
+    botName: 'AUTHOR TECH BOT',
     prefix: '.',
     sessionName: 'session',
     sessionID: process.env.SESSION_ID || '',
-    newsletterJid: '120363161513685998@newsletter', // Newsletter JID for menu forwarding
-    updateZipUrl: 'https://github.com/mruniquehacker/KnightBot-Mini/archive/refs/heads/main.zip', // URL to latest code zip for .update command
+    newsletterJid: '',
+    updateZipUrl: 'https://github.com/omari143/KnightBot-Mini/archive/refs/heads/main.zip',
     
     // Sticker Configuration
-    packname: 'Knight Bot Mini',
+    packname: 'AUTHOR TECH BOT',
     
     // Bot Behavior
-    selfMode: false, // Private mode - only owner can use commands
+    selfMode: false,
     autoRead: false,
     autoTyping: false,
     autoBio: false,
     autoSticker: false,
     autoReact: false,
-    autoReactMode: 'bot', // set bot or all via cmd
+    autoReactMode: 'bot',
     autoDownload: false,
     
     // Group Settings Defaults
     defaultGroupSettings: {
       antilink: false,
-      antilinkAction: 'delete', // 'delete', 'kick', 'warn'
+      antilinkAction: 'delete',
       antitag: false,
       antitagAction: 'delete',
-      antiall: false, // Owner only - blocks all messages from non-admins
+      antiall: false,
       antiviewonce: false,
       antibot: false,
-      anticall: false, // Anti-call feature
-      antigroupmention: false, // Anti-group mention feature
-      antigroupmentionAction: 'delete', // 'delete', 'kick'
+      anticall: false,
+      antigroupmention: false,
+      antigroupmentionAction: 'delete',
       welcome: false,
-      welcomeMessage: '╭╼━≪•𝙽𝙴𝚆 𝙼𝙴𝙼𝙱𝙴𝚁•≫━╾╮\n┃𝚆𝙴𝙻𝙲𝙾𝙼𝙴: @user 👋\n┃Member count: #memberCount\n┃𝚃𝙸𝙼𝙴: time⏰\n╰━━━━━━━━━━━━━━━╯\n\n*@user* Welcome to *@group*! 🎉\n*Group 𝙳𝙴𝚂𝙲𝚁𝙸𝙿𝚃𝙸𝙾𝙽*\ngroupDesc\n\n> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ botName*',
+      welcomeMessage: '╭╼━≪•𝙽𝙴𝚆 𝙼𝙴𝙼𝙱𝙴𝚁•≫━╾╮\n┃𝚆𝙴𝙻𝙲𝙾𝙼𝙴: @user 👋\n┃Member count: #memberCount\n┃𝚃𝙸𝙼𝙴: time⏰\n╰━━━━━━━━━━━━━━━╯\n\n*@user* Welcome to *@group*! 🎉\n*Group 𝙳𝙴𝚂𝙲𝚁𝙸𝙿𝚃𝙸𝙾𝙽*\ngroupDesc\n\n> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ AUTHOR TECH BOT*',
       goodbye: false,
       goodbyeMessage: 'Goodbye @user 👋 We will never miss you!',
       antiSpam: false,
@@ -49,12 +49,11 @@ module.exports = {
       nsfw: false,
       detect: false,
       chatbot: false,
-      autosticker: false // Auto-convert images/videos to stickers
+      autosticker: false
     },
     
-    // API Keys (add your own)
+    // API Keys
     apiKeys: {
-      // Add API keys here if needed
       openai: '',
       deepai: '',
       remove_bg: ''
@@ -73,17 +72,16 @@ module.exports = {
       invalidCommand: '❓ Invalid command! Type .menu for help'
     },
     
-    // Timezone
-    timezone: 'Asia/Kolkata',
+    // Timezone (Africa/Dar_es_Salaam)
+    timezone: 'Africa/Dar_es_Salaam',
     
     // Limits
     maxWarnings: 3,
     
-    // Social Links (optional)
+    // Social Links (zimeondolewa)
     social: {
-      github: 'https://github.com/mruniquehacker',
-      instagram: 'https://instagram.com/yourusername',
-      youtube: 'http://youtube.com/@mr_unique_hacker'
+      github: '',
+      instagram: '',
+      youtube: ''
     }
 };
-  
