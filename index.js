@@ -95,8 +95,9 @@ httpApp.get('/api/pairing', async (req, res) => {
   if (!phone || !phone.startsWith('+') || phone.length < 10) {
     return res.status(400).json({ error: 'Invalid phone number. Use +255XXXXXXXXX' });
   }
-  if (!global.sock) {
-    return res.status(503).json({ error: 'Bot not ready yet. Try again in a few seconds.' });
+  // Check if socket exists AND is ready (connected)
+  if (!global.sock || !global.sockReady) {
+    return res.status(503).json({ error: 'Bot is still connecting. Wait a few seconds and try again.' });
   }
   try {
     const code = await global.sock.requestPairingCode(phone);
@@ -111,6 +112,9 @@ httpApp.get('/api/pairing', async (req, res) => {
 httpApp.listen(PORT, () => {
   console.log(`✅ HTTP server listening on port ${PORT}`);
 });
+
+// Global flag to indicate socket readiness
+global.sockReady = false;
 
 // Remove Puppeteer cache (if some dependency downloaded Chromium into ~/.cache/puppeteer)
 function cleanupPuppeteerCache() {
@@ -328,6 +332,7 @@ async function startBot() {
     }
 
     if (connection === 'close') {
+      global.sockReady = false; // Socket is no longer ready
       const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
       const statusCode = lastDisconnect?.error?.output?.statusCode;
       const errorMessage = lastDisconnect?.error?.message || 'Unknown error';
@@ -343,6 +348,7 @@ async function startBot() {
         setTimeout(() => startBot(), 3000);
       }
     } else if (connection === 'open') {
+      global.sockReady = true; // Socket is ready for pairing
       console.log('\n✅ Bot connected successfully!');
       console.log(`📱 Bot Number: ${sock.user.id.split(':')[0]}`);
       console.log(`🤖 Bot Name: ${config.botName}`);
