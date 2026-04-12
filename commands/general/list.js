@@ -53,35 +53,12 @@ module.exports = {
       
       menu = menu.trimEnd();
       
-      
-      // Send message with buttons using gifted-btns
+      // Send message with buttons (no external links)
       await sendButtons(sock, extra.from, {
         title: '',
         text: menu,
         footer: `> *Powered by ${config.botName}*`,
-        buttons: [
-          {
-            name: 'cta_url',
-            buttonParamsJson: JSON.stringify({
-              display_text: 'Youtube',
-              url: config.social?.youtube || 'http://youtube.com/@mr_unique_hacker'
-            })
-          },
-          {
-            name: 'cta_url',
-            buttonParamsJson: JSON.stringify({
-              display_text: 'Visit Bot Repo',
-              url: config.social?.github || 'https://github.com/mruniquehacker'
-            })
-          },
-          {
-            name: 'cta_url',
-            buttonParamsJson: JSON.stringify({
-              display_text: 'Join Channel',
-              url: 'https://whatsapp.com/channel/0029Va90zAnIHphOuO8Msp3A'
-            })
-          }
-        ]
+        buttons: [] // No buttons to avoid external links
       }, { quoted: msg });
       
     } catch (err) {
@@ -90,4 +67,3 @@ module.exports = {
     }
   }
 };
-
