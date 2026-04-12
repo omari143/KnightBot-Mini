@@ -1,6 +1,6 @@
 {
-  "name": "Knight Bot MINI",
-  "description": "WhatsApp MD bot (Baileys)",
+  "name": "AUTHOR TECH BOT",
+  "description": "WhatsApp MD bot by MR AUTHOR (Baileys)",
   "repository": "",
   "keywords": ["whatsapp", "baileys", "bot", "node"],
   "buildpacks": [
@@ -10,10 +10,9 @@
   ],
   "env": {
     "SESSION_ID": {
-      "description": "KnightBot session string (e.g. KnightBot!<base64_compressed_data>)",
+      "description": "AUTHORTECH session string (e.g. AUTHORTECH!<base64_compressed_data>)",
       "required": false,
       "value": ""
     }
   }
 }
-
