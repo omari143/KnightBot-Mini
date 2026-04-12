@@ -1,6 +1,6 @@
 /**
  * WhatsApp MD Bot - Main Entry Point
- * AUTHOR TECH BOT (Rebranded)
+ * AUTHOR TECH BOT (Rebranded, full original features)
  */
 process.env.PUPPETEER_SKIP_DOWNLOAD = 'true';
 process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = 'true';
@@ -69,28 +69,40 @@ const path = require('path');
 const zlib = require('zlib');
 const os = require('os');
 
-// ==================== HTTP SERVER FOR RENDER (ADDED) ====================
+// ==================== HTTP SERVER FOR RENDER (ADDED – NO ORIGINAL CODE REMOVED) ====================
 const express = require('express');
 const httpApp = express();
 const PORT = process.env.PORT || 3000;
+
+// CORS – allow frontend to call this bot
+httpApp.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
 
 httpApp.get('/health', (req, res) => {
   res.status(200).send('AUTHOR TECH BOT is alive');
 });
 
-// Optional pairing endpoint (for frontend)
 httpApp.get('/api/pairing', async (req, res) => {
   const phone = req.query.phone;
   if (!phone || !/^\+\d{10,15}$/.test(phone)) {
     return res.status(400).json({ error: 'Invalid phone number. Use +255XXXXXXXXX' });
   }
   if (!global.sock) {
-    return res.status(503).json({ error: 'Bot not ready yet. Try again.' });
+    return res.status(503).json({ error: 'Bot not ready yet. Try again in a few seconds.' });
   }
   try {
     const code = await global.sock.requestPairingCode(phone);
+    console.log(`📡 Pairing code for ${phone}: ${code}`);
     res.json({ success: true, pairingCode: code });
   } catch (err) {
+    console.error('Pairing error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -270,7 +282,7 @@ async function startBot() {
     getMessage: async () => undefined // Don't load messages from store
   });
 
-  // Make sock global for HTTP pairing endpoint
+  // Make sock globally available for HTTP pairing endpoint
   global.sock = sock;
 
   // Bind store to socket
