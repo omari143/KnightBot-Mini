@@ -1,6 +1,5 @@
 /**
  * WhatsApp MD Bot - Main Entry Point
- * AUTHOR TECH BOT (Rebranded, full original features)
  */
 process.env.PUPPETEER_SKIP_DOWNLOAD = 'true';
 process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = 'true';
@@ -68,53 +67,6 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const os = require('os');
-
-// ==================== HTTP SERVER FOR RENDER (ADDED – NO ORIGINAL CODE REMOVED) ====================
-const express = require('express');
-const httpApp = express();
-const PORT = process.env.PORT || 3000;
-
-// CORS – allow frontend to call this bot
-httpApp.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
-  next();
-});
-
-httpApp.get('/health', (req, res) => {
-  res.status(200).send('AUTHOR TECH BOT is alive');
-});
-
-httpApp.get('/api/pairing', async (req, res) => {
-  const phone = req.query.phone;
-  // Relaxed validation: must start with + and have at least 10 characters total
-  if (!phone || !phone.startsWith('+') || phone.length < 10) {
-    return res.status(400).json({ error: 'Invalid phone number. Use +255XXXXXXXXX' });
-  }
-  // Check if socket exists AND is ready (connected)
-  if (!global.sock || !global.sockReady) {
-    return res.status(503).json({ error: 'Bot is still connecting. Wait a few seconds and try again.' });
-  }
-  try {
-    const code = await global.sock.requestPairingCode(phone);
-    console.log(`📡 Pairing code for ${phone}: ${code}`);
-    res.json({ success: true, pairingCode: code });
-  } catch (err) {
-    console.error('Pairing error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-httpApp.listen(PORT, () => {
-  console.log(`✅ HTTP server listening on port ${PORT}`);
-});
-
-// Global flag to indicate socket readiness
-global.sockReady = false;
 
 // Remove Puppeteer cache (if some dependency downloaded Chromium into ~/.cache/puppeteer)
 function cleanupPuppeteerCache() {
@@ -239,13 +191,13 @@ async function startBot() {
   const sessionFolder = `./${config.sessionName}`;
   const sessionFile = path.join(sessionFolder, 'creds.json');
 
-  // Check if sessionID is provided and process AUTHORTECH! format session
-  if (config.sessionID && config.sessionID.startsWith('AUTHORTECH!')) {
+  // Check if sessionID is provided and process KnightBot! format session
+  if (config.sessionID && config.sessionID.startsWith('KnightBot!')) {
     try {
       const [header, b64data] = config.sessionID.split('!');
 
-      if (header !== 'AUTHORTECH' || !b64data) {
-        throw new Error("❌ Invalid session format. Expected 'AUTHORTECH!.....'");
+      if (header !== 'KnightBot' || !b64data) {
+        throw new Error("❌ Invalid session format. Expected 'KnightBot!.....'");
       }
 
       const cleanB64 = b64data.replace('...', '');
@@ -259,10 +211,10 @@ async function startBot() {
 
       // Write decompressed session data to creds.json
       fs.writeFileSync(sessionFile, decompressedData, 'utf8');
-      console.log('📡 Session : 🔑 Retrieved from AUTHOR TECH BOT Session');
+      console.log('📡 Session : 🔑 Retrieved from KnightBot Session');
 
     } catch (e) {
-      console.error('📡 Session : ❌ Error processing AUTHOR TECH BOT session:', e.message);
+      console.error('📡 Session : ❌ Error processing KnightBot session:', e.message);
       // Continue with normal QR flow if session processing fails
     }
   }
@@ -286,9 +238,6 @@ async function startBot() {
     markOnlineOnConnect: false,
     getMessage: async () => undefined // Don't load messages from store
   });
-
-  // Make sock globally available for HTTP pairing endpoint
-  global.sock = sock;
 
   // Bind store to socket
   store.bind(sock.ev);
@@ -332,7 +281,6 @@ async function startBot() {
     }
 
     if (connection === 'close') {
-      global.sockReady = false; // Socket is no longer ready
       const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
       const statusCode = lastDisconnect?.error?.output?.statusCode;
       const errorMessage = lastDisconnect?.error?.message || 'Unknown error';
@@ -348,7 +296,6 @@ async function startBot() {
         setTimeout(() => startBot(), 3000);
       }
     } else if (connection === 'open') {
-      global.sockReady = true; // Socket is ready for pairing
       console.log('\n✅ Bot connected successfully!');
       console.log(`📱 Bot Number: ${sock.user.id.split(':')[0]}`);
       console.log(`🤖 Bot Name: ${config.botName}`);
