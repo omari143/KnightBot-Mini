@@ -91,7 +91,8 @@ httpApp.get('/health', (req, res) => {
 
 httpApp.get('/api/pairing', async (req, res) => {
   const phone = req.query.phone;
-  if (!phone || !/^\+\d{10,15}$/.test(phone)) {
+  // Relaxed validation: must start with + and have at least 10 characters total
+  if (!phone || !phone.startsWith('+') || phone.length < 10) {
     return res.status(400).json({ error: 'Invalid phone number. Use +255XXXXXXXXX' });
   }
   if (!global.sock) {
