@@ -124,8 +124,8 @@ module.exports = {
         menuText += `\n`;
       }
 
-       // Anime Commands
-       if (categories.anime) {
+      // Anime Commands
+      if (categories.anime) {
         menuText += `┏━━━━━━━━━━━━━━━━━\n`;
         menuText += `┃ 👾 ANIME COMMAND\n`;
         menuText += `┗━━━━━━━━━━━━━━━━━\n`;
@@ -135,8 +135,8 @@ module.exports = {
         menuText += `\n`;
       }
 
-       // Textmaker Commands
-       if (categories.utility) {
+      // Textmaker Commands
+      if (categories.textmaker) {
         menuText += `┏━━━━━━━━━━━━━━━━━\n`;
         menuText += `┃ 🖋️ TEXTMAKER COMMAND\n`;
         menuText += `┗━━━━━━━━━━━━━━━━━\n`;
@@ -150,27 +150,17 @@ module.exports = {
       menuText += `💡 Type ${config.prefix}help <command> for more info\n`;
       menuText += `🌟 Bot Version: 1.0.0\n`;
       
-      // Send menu with image
+      // Send menu with image (without newsletter forwarding)
       const fs = require('fs');
       const path = require('path');
       const imagePath = path.join(__dirname, '../../utils/bot_image.jpg');
       
       if (fs.existsSync(imagePath)) {
-        // Send image with newsletter forwarding context
         const imageBuffer = fs.readFileSync(imagePath);
         await sock.sendMessage(extra.from, {
           image: imageBuffer,
           caption: menuText,
-          mentions: [extra.sender],
-          contextInfo: {
-            forwardingScore: 1,
-            isForwarded: true,
-            forwardedNewsletterMessageInfo: {
-              newsletterJid: config.newsletterJid || '120363161513685998@newsletter',
-              newsletterName: config.botName,
-              serverMessageId: -1
-            }
-          }
+          mentions: [extra.sender]
         }, { quoted: msg });
       } else {
         await sock.sendMessage(extra.from, {
@@ -180,6 +170,7 @@ module.exports = {
       }
       
     } catch (error) {
+      console.error('Menu error:', error);
       await extra.reply(`❌ Error: ${error.message}`);
     }
   }
