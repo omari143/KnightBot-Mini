@@ -72,7 +72,7 @@ module.exports = {
       invalidCommand: '❓ Invalid command! Type .menu for help'
     },
     
-    // Timezone (Africa/Dar_es_Salaam)
+    // Timezone
     timezone: 'Africa/Dar_es_Salaam',
     
     // Limits
