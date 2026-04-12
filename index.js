@@ -1,6 +1,6 @@
 /**
- * AUTHOR TECH BOT - Main Entry Point
- * WhatsApp MD Bot with Baileys
+ * WhatsApp MD Bot - Main Entry Point
+ * AUTHOR TECH BOT (Rebranded)
  */
 process.env.PUPPETEER_SKIP_DOWNLOAD = 'true';
 process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = 'true';
@@ -10,16 +10,25 @@ const { initializeTempSystem } = require('./utils/tempManager');
 const { startCleanup } = require('./utils/cleanup');
 initializeTempSystem();
 startCleanup();
-
-// ==================== SUPPRESS NOISY LOGS ====================
 const originalConsoleLog = console.log;
 const originalConsoleError = console.error;
 const originalConsoleWarn = console.warn;
 
 const forbiddenPatternsConsole = [
-  'closing session', 'closing open session', 'sessionentry', 'prekey bundle',
-  'pendingprekey', '_chains', 'registrationid', 'currentratchet', 'chainkey',
-  'ratchet', 'signal protocol', 'ephemeralkeypair', 'indexinfo', 'basekey'
+  'closing session',
+  'closing open session',
+  'sessionentry',
+  'prekey bundle',
+  'pendingprekey',
+  '_chains',
+  'registrationid',
+  'currentratchet',
+  'chainkey',
+  'ratchet',
+  'signal protocol',
+  'ephemeralkeypair',
+  'indexinfo',
+  'basekey'
 ];
 
 console.log = (...args) => {
@@ -28,12 +37,14 @@ console.log = (...args) => {
     originalConsoleLog.apply(console, args);
   }
 };
+
 console.error = (...args) => {
   const message = args.map(a => typeof a === 'string' ? a : typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ').toLowerCase();
   if (!forbiddenPatternsConsole.some(pattern => message.includes(pattern))) {
     originalConsoleError.apply(console, args);
   }
 };
+
 console.warn = (...args) => {
   const message = args.map(a => typeof a === 'string' ? a : typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ').toLowerCase();
   if (!forbiddenPatternsConsole.some(pattern => message.includes(pattern))) {
@@ -41,7 +52,7 @@ console.warn = (...args) => {
   }
 };
 
-// ==================== LOAD DEPENDENCIES ====================
+// Now safe to load libraries
 const pino = require('pino');
 const {
   default: makeWASocket,
@@ -58,45 +69,42 @@ const path = require('path');
 const zlib = require('zlib');
 const os = require('os');
 
-// ==================== HTTP SERVER FOR RENDER ====================
+// ==================== HTTP SERVER FOR RENDER (ADDED) ====================
 const express = require('express');
 const httpApp = express();
 const PORT = process.env.PORT || 3000;
 
-// Health check endpoint (required by Render)
 httpApp.get('/health', (req, res) => {
   res.status(200).send('AUTHOR TECH BOT is alive');
 });
 
-// Pairing endpoint (for frontend integration) – optional
+// Optional pairing endpoint (for frontend)
 httpApp.get('/api/pairing', async (req, res) => {
   const phone = req.query.phone;
   if (!phone || !/^\+\d{10,15}$/.test(phone)) {
     return res.status(400).json({ error: 'Invalid phone number. Use +255XXXXXXXXX' });
   }
-  if (!globalThis.authorBotSock) {
-    return res.status(503).json({ error: 'Bot not ready yet. Try again in a few seconds.' });
+  if (!global.sock) {
+    return res.status(503).json({ error: 'Bot not ready yet. Try again.' });
   }
   try {
-    const code = await globalThis.authorBotSock.requestPairingCode(phone);
-    console.log(`📡 Pairing code for ${phone}: ${code}`);
+    const code = await global.sock.requestPairingCode(phone);
     res.json({ success: true, pairingCode: code });
   } catch (err) {
-    console.error('Pairing error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// Start HTTP server
 httpApp.listen(PORT, () => {
   console.log(`✅ HTTP server listening on port ${PORT}`);
 });
 
-// ==================== CLEANUP PUPPETEER CACHE ====================
+// Remove Puppeteer cache (if some dependency downloaded Chromium into ~/.cache/puppeteer)
 function cleanupPuppeteerCache() {
   try {
     const home = os.homedir();
     const cacheDir = path.join(home, '.cache', 'puppeteer');
+
     if (fs.existsSync(cacheDir)) {
       console.log('🧹 Removing Puppeteer cache at:', cacheDir);
       fs.rmSync(cacheDir, { recursive: true, force: true });
@@ -106,143 +114,221 @@ function cleanupPuppeteerCache() {
     console.error('⚠️ Failed to cleanup Puppeteer cache:', err.message || err);
   }
 }
-
-// ==================== IN-MEMORY STORE ====================
+// Optimized in-memory store with hard limits (Map-based for better memory management)
 const store = {
-  messages: new Map(),
-  maxPerChat: 20,
+  messages: new Map(), // Use Map instead of plain object
+  maxPerChat: 20, // Limit to 20 messages per chat
+
   bind: (ev) => {
     ev.on('messages.upsert', ({ messages }) => {
       for (const msg of messages) {
         if (!msg.key?.id) continue;
+
         const jid = msg.key.remoteJid;
-        if (!store.messages.has(jid)) store.messages.set(jid, new Map());
+        if (!store.messages.has(jid)) {
+          store.messages.set(jid, new Map());
+        }
+
         const chatMsgs = store.messages.get(jid);
         chatMsgs.set(msg.key.id, msg);
+
+        // Aggressive cleanup per chat - keep only recent messages
         if (chatMsgs.size > store.maxPerChat) {
+          // Remove oldest message (first entry in Map)
           const oldestKey = chatMsgs.keys().next().value;
           chatMsgs.delete(oldestKey);
         }
       }
     });
   },
-  loadMessage: async (jid, id) => store.messages.get(jid)?.get(id) || null
+
+  loadMessage: async (jid, id) => {
+    return store.messages.get(jid)?.get(id) || null;
+  }
 };
 
-// ==================== MESSAGE DEDUPLICATION ====================
+// Optimized message deduplication (Set-based, no timestamps needed)
 const processedMessages = new Set();
-setInterval(() => processedMessages.clear(), 5 * 60 * 1000);
 
-// ==================== CUSTOM LOGGER ====================
+// Aggressive cleanup - clear every 5 minutes
+setInterval(() => {
+  processedMessages.clear();
+}, 5 * 60 * 1000); // Every 5 minutes
+
+// Custom Pino logger with suppression for Baileys noise
 const createSuppressedLogger = (level = 'silent') => {
   const forbiddenPatterns = [
-    'closing session', 'closing open session', 'sessionentry', 'prekey bundle',
-    'pendingprekey', '_chains', 'registrationid', 'currentratchet', 'chainkey',
-    'ratchet', 'signal protocol', 'ephemeralkeypair', 'indexinfo', 'basekey', 'ratchetkey'
+    'closing session',
+    'closing open session',
+    'sessionentry',
+    'prekey bundle',
+    'pendingprekey',
+    '_chains',
+    'registrationid',
+    'currentratchet',
+    'chainkey',
+    'ratchet',
+    'signal protocol',
+    'ephemeralkeypair',
+    'indexinfo',
+    'basekey',
+    'sessionentry',
+    'ratchetkey'
   ];
+
   let logger;
   try {
     logger = pino({
       level,
+      // Fallback transport without pino-pretty (in case not installed)
       transport: process.env.NODE_ENV === 'production' ? undefined : {
         target: 'pino-pretty',
-        options: { colorize: true, ignore: 'pid,hostname' }
+        options: {
+          colorize: true,
+          ignore: 'pid,hostname'
+        }
       },
-      customLevels: { trace: 0, debug: 1, info: 2, warn: 3, error: 4, fatal: 5 },
+      customLevels: {
+        trace: 0,
+        debug: 1,
+        info: 2,
+        warn: 3,
+        error: 4,
+        fatal: 5
+      },
+      // Redact sensitive fields
       redact: ['registrationId', 'ephemeralKeyPair', 'rootKey', 'chainKey', 'baseKey']
     });
   } catch (err) {
+    // Fallback to basic pino without transport
     logger = pino({ level });
   }
+
+  // Wrap log methods to filter
   const originalInfo = logger.info.bind(logger);
   logger.info = (...args) => {
     const msg = args.map(a => typeof a === 'string' ? a : JSON.stringify(a)).join(' ').toLowerCase();
-    if (!forbiddenPatterns.some(p => msg.includes(p))) originalInfo(...args);
+    if (!forbiddenPatterns.some(pattern => msg.includes(pattern))) {
+      originalInfo(...args);
+    }
   };
-  logger.debug = () => {};
-  logger.trace = () => {};
+  logger.debug = () => { }; // Fully disable debug
+  logger.trace = () => { }; // Fully disable trace
   return logger;
 };
 
-// ==================== MAIN BOT FUNCTION ====================
-let globalSock = null;
+// Main connection function
 async function startBot() {
   const sessionFolder = `./${config.sessionName}`;
   const sessionFile = path.join(sessionFolder, 'creds.json');
 
-  // Process AUTHORTECH! session format
+  // Check if sessionID is provided and process AUTHORTECH! format session
   if (config.sessionID && config.sessionID.startsWith('AUTHORTECH!')) {
     try {
       const [header, b64data] = config.sessionID.split('!');
+
       if (header !== 'AUTHORTECH' || !b64data) {
         throw new Error("❌ Invalid session format. Expected 'AUTHORTECH!.....'");
       }
+
       const cleanB64 = b64data.replace('...', '');
       const compressedData = Buffer.from(cleanB64, 'base64');
       const decompressedData = zlib.gunzipSync(compressedData);
-      if (!fs.existsSync(sessionFolder)) fs.mkdirSync(sessionFolder, { recursive: true });
+
+      // Ensure session folder exists
+      if (!fs.existsSync(sessionFolder)) {
+        fs.mkdirSync(sessionFolder, { recursive: true });
+      }
+
+      // Write decompressed session data to creds.json
       fs.writeFileSync(sessionFile, decompressedData, 'utf8');
       console.log('📡 Session : 🔑 Retrieved from AUTHOR TECH BOT Session');
+
     } catch (e) {
       console.error('📡 Session : ❌ Error processing AUTHOR TECH BOT session:', e.message);
+      // Continue with normal QR flow if session processing fails
     }
   }
 
   const { state, saveCreds } = await useMultiFileAuthState(sessionFolder);
   const { version } = await fetchLatestBaileysVersion();
+
+  // Use suppressed logger for socket
   const suppressedLogger = createSuppressedLogger('silent');
 
   const sock = makeWASocket({
-    version,
+    version, // explicit WA Web version negotiated with the server
     logger: suppressedLogger,
     printQRInTerminal: false,
-    browser: Browsers.macOS('Desktop'),
+    // Use a common desktop browser signature
+    browser: ['Chrome', 'Windows', '10.0'],
     auth: state,
+    // Memory optimization: prevent loading old messages into RAM
     syncFullHistory: false,
     downloadHistory: false,
     markOnlineOnConnect: false,
-    getMessage: async () => undefined
+    getMessage: async () => undefined // Don't load messages from store
   });
 
-  globalSock = sock;
-  globalThis.authorBotSock = sock; // For pairing API
+  // Make sock global for HTTP pairing endpoint
+  global.sock = sock;
 
+  // Bind store to socket
   store.bind(sock.ev);
 
-  // Watchdog for inactivity
+  // Watchdog for inactive socket (Baileys bug fix)
   let lastActivity = Date.now();
-  const INACTIVITY_TIMEOUT = 30 * 60 * 1000;
-  sock.ev.on('messages.upsert', () => { lastActivity = Date.now(); });
+  const INACTIVITY_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+
+  // Update on every message
+  sock.ev.on('messages.upsert', () => {
+    lastActivity = Date.now();
+  });
+
+  // Check every 5 min
   const watchdogInterval = setInterval(async () => {
-    if (Date.now() - lastActivity > INACTIVITY_TIMEOUT && sock.ws.readyState === 1) {
+    if (Date.now() - lastActivity > INACTIVITY_TIMEOUT && sock.ws.readyState === 1) { // WebSocket open but inactive
       console.log('⚠️ No activity detected. Forcing reconnect...');
       await sock.end(undefined, undefined, { reason: 'inactive' });
       clearInterval(watchdogInterval);
-      setTimeout(() => startBot(), 5000);
+      setTimeout(() => startBot(), 5000); // Slightly longer delay
     }
-  }, 5 * 60 * 1000);
+  }, 5 * 60 * 1000); // Every 5 min check
+
+  // Clear on close/open
   sock.ev.on('connection.update', (update) => {
     const { connection } = update;
-    if (connection === 'open') lastActivity = Date.now();
-    else if (connection === 'close') clearInterval(watchdogInterval);
+    if (connection === 'open') {
+      lastActivity = Date.now(); // Reset on open
+    } else if (connection === 'close') {
+      clearInterval(watchdogInterval);
+    }
   });
 
   // Connection update handler
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update;
+
     if (qr) {
       console.log('\n\n📱 Scan this QR code with WhatsApp:\n');
       qrcode.generate(qr, { small: true });
     }
+
     if (connection === 'close') {
       const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
       const statusCode = lastDisconnect?.error?.output?.statusCode;
+      const errorMessage = lastDisconnect?.error?.message || 'Unknown error';
+
+      // Suppress verbose error output for common stream errors (515, etc.)
       if (statusCode === 515 || statusCode === 503 || statusCode === 408) {
         console.log(`⚠️ Connection closed (${statusCode}). Reconnecting...`);
       } else {
-        console.log('Connection closed due to:', lastDisconnect?.error?.message || 'Unknown error', '\nReconnecting:', shouldReconnect);
+        console.log('Connection closed due to:', errorMessage, '\nReconnecting:', shouldReconnect);
       }
-      if (shouldReconnect) setTimeout(() => startBot(), 3000);
+
+      if (shouldReconnect) {
+        setTimeout(() => startBot(), 3000);
+      }
     } else if (connection === 'open') {
       console.log('\n✅ Bot connected successfully!');
       console.log(`📱 Bot Number: ${sock.user.id.split(':')[0]}`);
@@ -252,14 +338,19 @@ async function startBot() {
       console.log(`👑 Owner: ${ownerNames}\n`);
       console.log('Bot is ready to receive messages!\n');
 
-      if (config.autoBio) await sock.updateProfileStatus(`${config.botName} | Active 24/7`);
+      // Set bot status
+      if (config.autoBio) {
+        await sock.updateProfileStatus(`${config.botName} | Active 24/7`);
+      }
+
+      // Initialize anti-call feature
       handler.initializeAntiCall(sock);
 
-      // Clean old chats from store
+      // Cleanup old chats (keep only active ones, e.g., last touched <1 day)
       const now = Date.now();
       for (const [jid, chatMsgs] of store.messages.entries()) {
         const timestamps = Array.from(chatMsgs.values()).map(m => m.messageTimestamp * 1000 || 0);
-        if (timestamps.length && now - Math.max(...timestamps) > 24 * 60 * 60 * 1000) {
+        if (timestamps.length > 0 && now - Math.max(...timestamps) > 24 * 60 * 60 * 1000) { // 1 day old chat
           store.messages.delete(jid);
         }
       }
@@ -267,104 +358,178 @@ async function startBot() {
     }
   });
 
+  // Credentials update handler
   sock.ev.on('creds.update', saveCreds);
 
-  const isSystemJid = (jid) => !jid || jid.includes('@broadcast') || jid.includes('status.broadcast') || jid.includes('@newsletter') || jid.includes('@newsletter.');
+  // System JID filter - checks if JID is from broadcast/status/newsletter
+  const isSystemJid = (jid) => {
+    if (!jid) return true;
+    return jid.includes('@broadcast') ||
+      jid.includes('status.broadcast') ||
+      jid.includes('@newsletter') ||
+      jid.includes('@newsletter.');
+  };
 
+  // Messages handler - Process only new messages
   sock.ev.on('messages.upsert', ({ messages, type }) => {
+    // Only process "notify" type (new messages), skip "append" (old messages from history)
     if (type !== 'notify') return;
+
+    // Process messages in the array
     for (const msg of messages) {
+      // Skip if message is invalid or missing key
       if (!msg.message || !msg.key?.id) continue;
+
       const from = msg.key.remoteJid;
-      if (!from || isSystemJid(from)) continue;
+      if (!from) {
+        continue;
+      }
+
+      // System message filter - ignore broadcast/status/newsletter messages
+      if (isSystemJid(from)) {
+        continue; // Silently ignore system messages
+      }
+
+      // Deduplication: Skip if message has already been processed
       const msgId = msg.key.id;
       if (processedMessages.has(msgId)) continue;
-      if (msg.messageTimestamp) {
-        const age = Date.now() - (msg.messageTimestamp * 1000);
-        if (age > 5 * 60 * 1000) continue;
-      }
-      processedMessages.add(msgId);
 
-      // Store message
-      if (msg.key && msg.key.id) {
-        if (!store.messages.has(from)) store.messages.set(from, new Map());
-        const chatMsgs = store.messages.get(from);
-        chatMsgs.set(msg.key.id, msg);
-        if (chatMsgs.size > store.maxPerChat) {
-          const sorted = Array.from(chatMsgs.entries()).sort((a,b) => (a[1].messageTimestamp||0) - (b[1].messageTimestamp||0)).map(([id]) => id);
-          for (let i = 0; i < sorted.length - store.maxPerChat; i++) chatMsgs.delete(sorted[i]);
+      // Timestamp validation: Only process messages within last 5 minutes
+      const MESSAGE_AGE_LIMIT = 5 * 60 * 1000; // 5 minutes in milliseconds
+      let messageAge = 0;
+      if (msg.messageTimestamp) {
+        messageAge = Date.now() - (msg.messageTimestamp * 1000);
+        if (messageAge > MESSAGE_AGE_LIMIT) {
+          // Message is too old, skip processing
+          continue;
         }
       }
 
-      // Process message
+      // Mark message as processed
+      processedMessages.add(msgId);
+
+      // Store message FIRST (before processing)
+      // from already defined above in DM block check
+      if (msg.key && msg.key.id) {
+        if (!store.messages.has(from)) {
+          store.messages.set(from, new Map());
+        }
+        const chatMsgs = store.messages.get(from);
+        chatMsgs.set(msg.key.id, msg);
+
+        // Cleanup: Keep only last 20 per chat (reduced from 200)
+        if (chatMsgs.size > store.maxPerChat) {
+          // Remove oldest messages
+          const sortedIds = Array.from(chatMsgs.entries())
+            .sort((a, b) => (a[1].messageTimestamp || 0) - (b[1].messageTimestamp || 0))
+            .map(([id]) => id);
+          for (let i = 0; i < sortedIds.length - store.maxPerChat; i++) {
+            chatMsgs.delete(sortedIds[i]);
+          }
+        }
+      }
+
+      // Process command IMMEDIATELY (don't block on other operations)
       handler.handleMessage(sock, msg).catch(err => {
-        if (!err.message?.includes('rate-overlimit') && !err.message?.includes('not-authorized')) {
+        if (!err.message?.includes('rate-overlimit') &&
+          !err.message?.includes('not-authorized')) {
           console.error('Error handling message:', err.message);
         }
       });
 
-      // Background tasks
+      // Do other operations in background (non-blocking)
       setImmediate(async () => {
         if (config.autoRead && from.endsWith('@g.us')) {
-          try { await sock.readMessages([msg.key]); } catch(e) {}
+          try {
+            await sock.readMessages([msg.key]);
+          } catch (e) {
+            // Silently handle
+          }
         }
         if (from.endsWith('@g.us')) {
           try {
-            const groupMetadata = await handler.getGroupMetadata(sock, from);
-            if (groupMetadata) await handler.handleAntilink(sock, msg, groupMetadata);
-          } catch(e) {}
+            const groupMetadata = await handler.getGroupMetadata(sock, msg.key.remoteJid);
+            if (groupMetadata) {
+              await handler.handleAntilink(sock, msg, groupMetadata);
+            }
+          } catch (error) {
+            // Silently handle
+          }
         }
       });
     }
   });
 
+  // Message receipt updates (silently handled, no logging)
+  sock.ev.on('message-receipt.update', () => {
+    // Silently handle receipt updates
+  });
+
+  // Message updates (silently handled, no logging)
+  sock.ev.on('messages.update', () => {
+    // Silently handle message updates
+  });
+
+  // Group participant updates (join/leave)
   sock.ev.on('group-participants.update', async (update) => {
     await handler.handleGroupUpdate(sock, update);
   });
 
+  // Handle errors - suppress common stream errors
   sock.ev.on('error', (error) => {
     const statusCode = error?.output?.statusCode;
-    if (![515, 503, 408].includes(statusCode)) {
-      console.error('Socket error:', error.message || error);
+    // Suppress verbose output for common stream errors
+    if (statusCode === 515 || statusCode === 503 || statusCode === 408) {
+      // These are usually temporary connection issues, handled by reconnection
+      return;
     }
+    console.error('Socket error:', error.message || error);
   });
-}
 
-// ==================== START BOT ====================
-console.log('🚀 Starting AUTHOR TECH BOT...\n');
+  return sock;
+}
+// Start the bot
+console.log('🚀 Starting WhatsApp MD Bot...\n');
 console.log(`📦 Bot Name: ${config.botName}`);
 console.log(`⚡ Prefix: ${config.prefix}`);
 const ownerNames = Array.isArray(config.ownerName) ? config.ownerName.join(',') : config.ownerName;
 console.log(`👑 Owner: ${ownerNames}\n`);
 
+// Proactively delete Puppeteer cache so it doesn't fill disk on panels
 cleanupPuppeteerCache();
+
 startBot().catch(err => {
   console.error('Error starting bot:', err);
   process.exit(1);
 });
-
-// ==================== PROCESS HANDLERS ====================
+// Handle process termination
 process.on('uncaughtException', (err) => {
+  // Handle ENOSPC errors gracefully without crashing
   if (err.code === 'ENOSPC' || err.errno === -28 || err.message?.includes('no space left on device')) {
     console.error('⚠️ ENOSPC Error: No space left on device. Attempting cleanup...');
     const { cleanupOldFiles } = require('./utils/cleanup');
     cleanupOldFiles();
-    return;
+    console.warn('⚠️ Cleanup completed. Bot will continue but may experience issues until space is freed.');
+    return; // Don't crash, just log and continue
   }
   console.error('Uncaught Exception:', err);
 });
 process.on('unhandledRejection', (err) => {
+  // Handle ENOSPC errors gracefully
   if (err.code === 'ENOSPC' || err.errno === -28 || err.message?.includes('no space left on device')) {
-    console.warn('⚠️ ENOSPC Error in promise. Attempting cleanup...');
+    console.warn('⚠️ ENOSPC Error in promise: No space left on device. Attempting cleanup...');
     const { cleanupOldFiles } = require('./utils/cleanup');
     cleanupOldFiles();
-    return;
+    console.warn('⚠️ Cleanup completed. Bot will continue but may experience issues until space is freed.');
+    return; // Don't crash, just log and continue
   }
-  if (err.message?.includes('rate-overlimit')) {
-    console.warn('⚠️ Rate limit reached. Please slow down.');
+
+  // Don't spam console with rate limit errors
+  if (err.message && err.message.includes('rate-overlimit')) {
+    console.warn('⚠️ Rate limit reached. Please slow down your requests.');
     return;
   }
   console.error('Unhandled Rejection:', err);
 });
-
+// Export store for use in commands
 module.exports = { store };
