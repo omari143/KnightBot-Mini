@@ -89,7 +89,7 @@ httpApp.get('/health', (req, res) => {
   res.status(200).send('AUTHOR TECH BOT is alive');
 });
 
-// Global flag for socket (optional, not used in endpoint)
+// Global flag for socket readiness
 global.sockReady = false;
 
 httpApp.get('/api/pairing', async (req, res) => {
@@ -98,9 +98,14 @@ httpApp.get('/api/pairing', async (req, res) => {
   if (!phone || phone.length < 5) {
     return res.status(400).json({ error: 'Invalid phone number. Use +255XXXXXXXXX' });
   }
-  // Only check if global.sock exists (ignore ready flag)
-  if (!global.sock) {
-    return res.status(503).json({ error: 'Bot is still starting. Try again in a few seconds.' });
+  // Wait until socket is ready (max 10 seconds)
+  let waited = 0;
+  while (!global.sockReady && waited < 10000) {
+    await new Promise(r => setTimeout(r, 500));
+    waited += 500;
+  }
+  if (!global.sock || !global.sockReady) {
+    return res.status(503).json({ error: 'Bot not ready yet. Wait a few seconds and try again.' });
   }
   try {
     const code = await global.sock.requestPairingCode(phone);
@@ -276,7 +281,7 @@ async function startBot() {
   const sock = makeWASocket({
     version, // explicit WA Web version negotiated with the server
     logger: suppressedLogger,
-    printQRInTerminal: true, // <<<--- BADILISHWA: Washa QR code
+    printQRInTerminal: false, // Keep false to avoid QR clutter, but we rely on pairing
     // Use a common desktop browser signature
     browser: ['Chrome', 'Windows', '10.0'],
     auth: state,
