@@ -89,18 +89,18 @@ httpApp.get('/health', (req, res) => {
   res.status(200).send('AUTHOR TECH BOT is alive');
 });
 
-// ===== ADDED: Global flag for socket readiness =====
+// Global flag for socket (optional, not used in endpoint)
 global.sockReady = false;
 
 httpApp.get('/api/pairing', async (req, res) => {
   const phone = req.query.phone;
-  // SIMPLIFIED validation: just check phone exists and has reasonable length
+  // Simplified validation
   if (!phone || phone.length < 5) {
     return res.status(400).json({ error: 'Invalid phone number. Use +255XXXXXXXXX' });
   }
-  // Check socket exists AND is ready
-  if (!global.sock || !global.sockReady) {
-    return res.status(503).json({ error: 'Bot is still connecting. Wait a few seconds and try again.' });
+  // Only check if global.sock exists (ignore ready flag)
+  if (!global.sock) {
+    return res.status(503).json({ error: 'Bot is still starting. Try again in a few seconds.' });
   }
   try {
     const code = await global.sock.requestPairingCode(phone);
@@ -276,7 +276,7 @@ async function startBot() {
   const sock = makeWASocket({
     version, // explicit WA Web version negotiated with the server
     logger: suppressedLogger,
-    printQRInTerminal: false,
+    printQRInTerminal: true, // <<<--- BADILISHWA: Washa QR code
     // Use a common desktop browser signature
     browser: ['Chrome', 'Windows', '10.0'],
     auth: state,
@@ -332,7 +332,6 @@ async function startBot() {
     }
 
     if (connection === 'close') {
-      // ===== ADDED: Reset readiness flag =====
       global.sockReady = false;
       const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
       const statusCode = lastDisconnect?.error?.output?.statusCode;
@@ -349,7 +348,6 @@ async function startBot() {
         setTimeout(() => startBot(), 3000);
       }
     } else if (connection === 'open') {
-      // ===== ADDED: Set readiness flag =====
       global.sockReady = true;
       console.log('\n✅ Bot connected successfully!');
       console.log(`📱 Bot Number: ${sock.user.id.split(':')[0]}`);
