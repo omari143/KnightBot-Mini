@@ -89,14 +89,18 @@ httpApp.get('/health', (req, res) => {
   res.status(200).send('AUTHOR TECH BOT is alive');
 });
 
+// ===== ADDED: Global flag for socket readiness =====
+global.sockReady = false;
+
 httpApp.get('/api/pairing', async (req, res) => {
   const phone = req.query.phone;
-  // Relaxed validation: must start with + and have at least 10 characters total
-  if (!phone || !phone.startsWith('+') || phone.length < 10) {
+  // SIMPLIFIED validation: just check phone exists and has reasonable length
+  if (!phone || phone.length < 5) {
     return res.status(400).json({ error: 'Invalid phone number. Use +255XXXXXXXXX' });
   }
-  if (!global.sock) {
-    return res.status(503).json({ error: 'Bot not ready yet. Try again in a few seconds.' });
+  // Check socket exists AND is ready
+  if (!global.sock || !global.sockReady) {
+    return res.status(503).json({ error: 'Bot is still connecting. Wait a few seconds and try again.' });
   }
   try {
     const code = await global.sock.requestPairingCode(phone);
@@ -328,6 +332,8 @@ async function startBot() {
     }
 
     if (connection === 'close') {
+      // ===== ADDED: Reset readiness flag =====
+      global.sockReady = false;
       const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
       const statusCode = lastDisconnect?.error?.output?.statusCode;
       const errorMessage = lastDisconnect?.error?.message || 'Unknown error';
@@ -343,6 +349,8 @@ async function startBot() {
         setTimeout(() => startBot(), 3000);
       }
     } else if (connection === 'open') {
+      // ===== ADDED: Set readiness flag =====
+      global.sockReady = true;
       console.log('\n✅ Bot connected successfully!');
       console.log(`📱 Bot Number: ${sock.user.id.split(':')[0]}`);
       console.log(`🤖 Bot Name: ${config.botName}`);
