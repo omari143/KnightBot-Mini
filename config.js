@@ -4,7 +4,7 @@
 
 module.exports = {
     // Bot Owner Configuration
-    ownerNumber: ['255716332371'], // Namba yako (bila +)
+    ownerNumber: ['+255716332371'], // Namba yako (pamoja na +)
     ownerName: ['MR AUTHOR'],
     
     // Bot Configuration
