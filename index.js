@@ -89,23 +89,14 @@ httpApp.get('/health', (req, res) => {
   res.status(200).send('AUTHOR TECH BOT is alive');
 });
 
-// Global flag for socket readiness
-global.sockReady = false;
-
 httpApp.get('/api/pairing', async (req, res) => {
   const phone = req.query.phone;
-  // Simplified validation
-  if (!phone || phone.length < 5) {
+  // Relaxed validation: must start with + and have at least 10 characters total
+  if (!phone || !phone.startsWith('+') || phone.length < 10) {
     return res.status(400).json({ error: 'Invalid phone number. Use +255XXXXXXXXX' });
   }
-  // Wait until socket is ready (max 10 seconds)
-  let waited = 0;
-  while (!global.sockReady && waited < 10000) {
-    await new Promise(r => setTimeout(r, 500));
-    waited += 500;
-  }
-  if (!global.sock || !global.sockReady) {
-    return res.status(503).json({ error: 'Bot not ready yet. Wait a few seconds and try again.' });
+  if (!global.sock) {
+    return res.status(503).json({ error: 'Bot not ready yet. Try again in a few seconds.' });
   }
   try {
     const code = await global.sock.requestPairingCode(phone);
@@ -115,6 +106,12 @@ httpApp.get('/api/pairing', async (req, res) => {
     console.error('Pairing error:', err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// ===== ADDED: QR endpoint =====
+httpApp.get('/api/qr', (req, res) => {
+  if (!global.qrCode) return res.status(404).json({ error: 'No QR available' });
+  res.json({ success: true, qrText: global.qrCode });
 });
 
 httpApp.listen(PORT, () => {
@@ -281,7 +278,7 @@ async function startBot() {
   const sock = makeWASocket({
     version, // explicit WA Web version negotiated with the server
     logger: suppressedLogger,
-    printQRInTerminal: false, // Keep false to avoid QR clutter, but we rely on pairing
+    printQRInTerminal: false,
     // Use a common desktop browser signature
     browser: ['Chrome', 'Windows', '10.0'],
     auth: state,
@@ -332,12 +329,13 @@ async function startBot() {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
+      // Store QR code globally for API access
+      global.qrCode = qr;
       console.log('\n\n📱 Scan this QR code with WhatsApp:\n');
       qrcode.generate(qr, { small: true });
     }
 
     if (connection === 'close') {
-      global.sockReady = false;
       const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
       const statusCode = lastDisconnect?.error?.output?.statusCode;
       const errorMessage = lastDisconnect?.error?.message || 'Unknown error';
@@ -353,7 +351,6 @@ async function startBot() {
         setTimeout(() => startBot(), 3000);
       }
     } else if (connection === 'open') {
-      global.sockReady = true;
       console.log('\n✅ Bot connected successfully!');
       console.log(`📱 Bot Number: ${sock.user.id.split(':')[0]}`);
       console.log(`🤖 Bot Name: ${config.botName}`);
