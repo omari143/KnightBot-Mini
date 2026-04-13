@@ -1,5 +1,6 @@
 /**
  * WhatsApp MD Bot - Main Entry Point
+ * AUTHOR TECH BOT (Rebranded, full original features)
  */
 process.env.PUPPETEER_SKIP_DOWNLOAD = 'true';
 process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = 'true';
@@ -67,6 +68,62 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const os = require('os');
+
+// ==================== HTTP SERVER FOR RENDER (ADDED – NO ORIGINAL CODE REMOVED) ====================
+const express = require('express');
+const httpApp = express();
+const PORT = process.env.PORT || 3000;
+
+// CORS – allow frontend to call this bot
+httpApp.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
+httpApp.get('/health', (req, res) => {
+  res.status(200).send('AUTHOR TECH BOT is alive');
+});
+
+httpApp.get('/api/pairing', async (req, res) => {
+  const phone = req.query.phone;
+  // Relaxed validation: must start with + and have at least 10 characters total
+  if (!phone || !phone.startsWith('+') || phone.length < 10) {
+    return res.status(400).json({ error: 'Invalid phone number. Use +255XXXXXXXXX' });
+  }
+  if (!global.sock) {
+    return res.status(503).json({ error: 'Bot not ready yet. Try again in a few seconds.' });
+  }
+
+  // FIX 1: Check if socket connection is actually open before requesting pairing
+  if (!global.sock.ws || global.sock.ws.readyState !== 1) {
+    return res.status(503).json({ error: 'Bot is reconnecting. Try again in 10 seconds.' });
+  }
+
+  try {
+    // FIX 2: Remove the '+' prefix - Baileys expects number WITHOUT '+'
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+    const code = await global.sock.requestPairingCode(cleanPhone);
+    console.log(`📡 Pairing code for ${cleanPhone}: ${code}`);
+    res.json({ success: true, pairingCode: code });
+  } catch (err) {
+    console.error('Pairing error:', err);
+
+    // FIX 3: If connection closed during pairing, give a clear message
+    if (err.message?.includes('Connection Closed') || err.message?.includes('connection closed')) {
+      return res.status(503).json({ error: 'Connection lost during pairing. Wait 10 seconds and try again.' });
+    }
+    res.status(500).json({ error: err.message });
+  }
+});
+
+httpApp.listen(PORT, () => {
+  console.log(`✅ HTTP server listening on port ${PORT}`);
+});
 
 // Remove Puppeteer cache (if some dependency downloaded Chromium into ~/.cache/puppeteer)
 function cleanupPuppeteerCache() {
@@ -186,18 +243,22 @@ const createSuppressedLogger = (level = 'silent') => {
   return logger;
 };
 
+// FIX 4: Track if pairing session is active to prevent conflicts
+let isPairingActive = false;
+let pairingTimeout = null;
+
 // Main connection function
 async function startBot() {
   const sessionFolder = `./${config.sessionName}`;
   const sessionFile = path.join(sessionFolder, 'creds.json');
 
-  // Check if sessionID is provided and process KnightBot! format session
-  if (config.sessionID && config.sessionID.startsWith('KnightBot!')) {
+  // Check if sessionID is provided and process AUTHORTECH! format session
+  if (config.sessionID && config.sessionID.startsWith('AUTHORTECH!')) {
     try {
       const [header, b64data] = config.sessionID.split('!');
 
-      if (header !== 'KnightBot' || !b64data) {
-        throw new Error("❌ Invalid session format. Expected 'KnightBot!.....'");
+      if (header !== 'AUTHORTECH' || !b64data) {
+        throw new Error("❌ Invalid session format. Expected 'AUTHORTECH!.....'");
       }
 
       const cleanB64 = b64data.replace('...', '');
@@ -211,10 +272,10 @@ async function startBot() {
 
       // Write decompressed session data to creds.json
       fs.writeFileSync(sessionFile, decompressedData, 'utf8');
-      console.log('📡 Session : 🔑 Retrieved from KnightBot Session');
+      console.log('📡 Session : 🔑 Retrieved from AUTHOR TECH BOT Session');
 
     } catch (e) {
-      console.error('📡 Session : ❌ Error processing KnightBot session:', e.message);
+      console.error('📡 Session : ❌ Error processing AUTHOR TECH BOT session:', e.message);
       // Continue with normal QR flow if session processing fails
     }
   }
@@ -239,6 +300,9 @@ async function startBot() {
     getMessage: async () => undefined // Don't load messages from store
   });
 
+  // FIX 5: Update global.sock IMMEDIATELY so pairing endpoint always has fresh reference
+  global.sock = sock;
+
   // Bind store to socket
   store.bind(sock.ev);
 
@@ -253,7 +317,7 @@ async function startBot() {
 
   // Check every 5 min
   const watchdogInterval = setInterval(async () => {
-    if (Date.now() - lastActivity > INACTIVITY_TIMEOUT && sock.ws.readyState === 1) { // WebSocket open but inactive
+    if (Date.now() - lastActivity > INACTIVITY_TIMEOUT && sock.ws && sock.ws.readyState === 1) { // WebSocket open but inactive
       console.log('⚠️ No activity detected. Forcing reconnect...');
       await sock.end(undefined, undefined, { reason: 'inactive' });
       clearInterval(watchdogInterval);
@@ -281,9 +345,12 @@ async function startBot() {
     }
 
     if (connection === 'close') {
-      const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
       const statusCode = lastDisconnect?.error?.output?.statusCode;
+      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
       const errorMessage = lastDisconnect?.error?.message || 'Unknown error';
+
+      // FIX 6: Clear global.sock on close to prevent stale calls
+      global.sock = null;
 
       // Suppress verbose error output for common stream errors (515, etc.)
       if (statusCode === 515 || statusCode === 503 || statusCode === 408) {
@@ -293,7 +360,9 @@ async function startBot() {
       }
 
       if (shouldReconnect) {
-        setTimeout(() => startBot(), 3000);
+        // FIX 7: Longer delay on reconnect to let WhatsApp servers reset
+        const delay = statusCode === 515 ? 5000 : 3000;
+        setTimeout(() => startBot(), delay);
       }
     } else if (connection === 'open') {
       console.log('\n✅ Bot connected successfully!');
